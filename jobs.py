@@ -96,5 +96,89 @@ class WorkstationCablingAudit(Job):
             "total": passed + failed,
         }
 
+class PrimaryIPAddressAudit(Job):
+    class Meta:
+        name = "Primary IPv4 Address Audit"
+        description = "Check training devices for an assigned primary IPv4 address."
+        read_only = True
+        has_sensitive_variables = False
 
-register_jobs(WorkstationCablingAudit)
+    def run(self):
+        devices = (
+            Device.objects.filter(tags__name="training-lab")
+            .distinct()
+            .order_by("name")
+        )
+
+        passed = 0
+        failed = 0
+        report_rows = []
+
+        for device in devices:
+            primary_ip = device.primary_ip4
+            log_context = {
+                "grouping": "primary-ip-audit",
+                "object": device,
+            }
+
+            if primary_ip:
+                result = "PASS"
+                address = str(primary_ip)
+
+                self.logger.success(
+                    "%s has primary IPv4 address %s",
+                    device.name,
+                    address,
+                    extra=log_context,
+                )
+                passed += 1
+            else:
+                result = "FAIL"
+                address = ""
+
+                self.logger.failure(
+                    "%s has no primary IPv4 address",
+                    device.name,
+                    extra=log_context,
+                )
+                failed += 1
+
+            report_rows.append(
+                {
+                    "device": device.name,
+                    "result": result,
+                    "primary_ip4": address,
+                }
+            )
+
+        csv_output = StringIO()
+        writer = csv.DictWriter(
+            csv_output,
+            fieldnames=["device", "result", "primary_ip4"],
+        )
+        writer.writeheader()
+        writer.writerows(report_rows)
+
+        self.create_file(
+            "primary_ipv4_audit.csv",
+            csv_output.getvalue(),
+        )
+
+        self.logger.info(
+            "Primary IPv4 audit complete: %s passed, %s failed.",
+            passed,
+            failed,
+            extra={"grouping": "summary"},
+        )
+
+        if failed:
+            self.fail(f"{failed} device(s) have no primary IPv4 address.")
+
+        return {
+            "passed": passed,
+            "failed": failed,
+            "total": passed + failed,
+        }
+
+
+register_jobs(WorkstationCablingAudit, PrimaryIPAddressAudit)
