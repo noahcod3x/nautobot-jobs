@@ -11,7 +11,7 @@ name = "Training Lab"
 class WorkstationCablingAudit(Job):
     class Meta:
         name = "Workstation Cabling Audit"
-        description = "Check training workstations for documented cable connections."
+        description = "Audit training workstations and produce a CSV cabling report."
         read_only = True
         has_sensitive_variables = False
 
